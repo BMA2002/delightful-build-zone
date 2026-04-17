@@ -17,9 +17,9 @@ const Settings = () => {
 
   // Initialize from settings once loaded
   if (settings && !initialized) {
-    setContainerPrefix(String(settings.dummy_container_prefix || "DUMMYCONT").replace(/"/g, ""));
+    setContainerPrefix(String(settings.dummy_container_prefix || "BRM").replace(/"/g, ""));
     setSealPrefix(String(settings.dummy_seal_prefix || "DUMMYSEAL").replace(/"/g, ""));
-    setDateFormat(String(settings.date_format || "YYYYMMDD").replace(/"/g, ""));
+    setDateFormat(String(settings.date_format || "dd/MM/yyyy").replace(/"/g, ""));
     setInitialized(true);
   }
 
