@@ -4,7 +4,9 @@ import StatsCard from "@/components/StatsCard";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { FileText, Package, Layers, Clock, Plus, Container, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
-import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { useDashboardStats
+  
+ } from "@/hooks/useDashboardStats";
 import { useActivityLog } from "@/hooks/useActivityLog";
 import { useContainers } from "@/hooks/useContainers";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
