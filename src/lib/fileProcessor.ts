@@ -1,7 +1,8 @@
+import { Container } from "lucide-react";
 import * as XLSX from "xlsx";
 
 export interface ParsedRow {
-  [key: string]: string | number | null;
+  [key: string]: string | number | null | undefined;
 }
 
 export interface ParsedFileResult {
@@ -12,6 +13,44 @@ export interface ParsedFileResult {
   rowsWithContainers: number;
   fileType: "po" | "mt" | "excel" | "csv";
 }
+
+// Exact headers from your CSV/Excel file (in correct order)
+const ORDERED_EXPORT_HEADERS = [
+  "Season",
+  "Location Code",
+  "Organization",
+  "Date Dispatched",
+  "Container No",
+  "Seal Number",
+  "Barcode",
+  "Barcode",                    // duplicate as in your file
+  "No Cartons",
+  "Gross",
+  "Nett",
+  "Commodity Code",
+  "Variety Code",
+  "Grade Code",
+  "Pack Code",
+  "Count Code",
+  "Mark Code",
+  "Target Market",
+  "Country",
+  "Farm No.",
+  "PHC",
+  "Orchard",
+  "Inspection Date",
+  "Insp. Point",
+  "Insp. Code",
+  "Original Intake Date",
+  "Consignment Note No.",
+  "Temptale",
+  "Inventory Code",
+  "Phyto Data",
+  "UPN",
+  "Consec no",
+  "Target Country",
+  "Production Area",
+];
 
 const CONTAINER_PATTERNS = ["container_number", "container no", "container", "cont_no", "containernumber"];
 const SEAL_PATTERNS = ["seal_number", "seal no", "seal", "sealnumber", "seal_no"];
@@ -32,27 +71,36 @@ function detectFileType(fileName: string): "po" | "mt" | "excel" | "csv" {
 export function parseFile(file: File): Promise<ParsedFileResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
+
         const jsonData = XLSX.utils.sheet_to_json<ParsedRow>(worksheet, { defval: null });
-        
+
         if (jsonData.length === 0) {
-          resolve({ rows: [], headers: [], hasContainerInfo: false, hasSealInfo: false, rowsWithContainers: 0, fileType: detectFileType(file.name) });
+          resolve({
+            rows: [],
+            headers: [],
+            hasContainerInfo: false,
+            hasSealInfo: false,
+            rowsWithContainers: 0,
+            fileType: detectFileType(file.name),
+          });
           return;
         }
 
         const headers = Object.keys(jsonData[0]);
+
         const containerCol = headers.find((h) => matchesColumn(h, CONTAINER_PATTERNS));
         const sealCol = headers.find((h) => matchesColumn(h, SEAL_PATTERNS));
 
-        let rowsWithContainers = 0;
-        if (containerCol) {
-          rowsWithContainers = jsonData.filter((row) => row[containerCol] && String(row[containerCol]).trim()).length;
-        }
+        const rowsWithContainers = containerCol
+          ? jsonData.filter((row) => row[containerCol] && String(row[containerCol]).trim()).length
+          : 0;
 
         resolve({
           rows: jsonData,
@@ -66,6 +114,7 @@ export function parseFile(file: File): Promise<ParsedFileResult> {
         reject(err);
       }
     };
+
     reader.onerror = () => reject(reader.error);
     reader.readAsArrayBuffer(file);
   });
@@ -84,6 +133,8 @@ export function getTodayStr(): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// ==================== SPLITTING LOGIC ====================
+
 export function splitAllocation(
   rows: ParsedRow[],
   method: string,
@@ -101,7 +152,8 @@ export function splitAllocation(
   if (method === "by_cartons" && cartonCol) {
     return splitByNumericColumn(rows, cartonCol, numSplits);
   }
-  // Default: equal distribution
+
+  // Default: equal split
   return equalSplit(rows, numSplits);
 }
 
@@ -114,23 +166,27 @@ function equalSplit(rows: ParsedRow[], n: number): ParsedRow[][] {
 function splitByNumericColumn(rows: ParsedRow[], col: string, n: number): ParsedRow[][] {
   const totalVal = rows.reduce((sum, r) => sum + (Number(r[col]) || 0), 0);
   const targetPerSplit = totalVal / n;
+
   const result: ParsedRow[][] = [[]];
   let currentSum = 0;
 
   for (const row of rows) {
     const val = Number(row[col]) || 0;
+
     if (result.length < n && currentSum + val > targetPerSplit * 1.1 && result[result.length - 1].length > 0) {
       result.push([]);
       currentSum = 0;
     }
+
     result[result.length - 1].push(row);
     currentSum += val;
   }
 
-  // Ensure we have exactly n groups
   while (result.length < n) result.push([]);
   return result.slice(0, n);
 }
+
+// ==================== EXPORT FUNCTIONS ====================
 
 export function rowsToWorkbook(rows: ParsedRow[], sheetName = "Data"): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -140,15 +196,34 @@ export function rowsToWorkbook(rows: ParsedRow[], sheetName = "Data"): XLSX.Work
 }
 
 export function downloadWorkbook(wb: XLSX.WorkBook, fileName: string) {
-  XLSX.writeFile(wb, fileName);
+  XLSX.writeFile(wb, fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
 }
 
+/**
+ * Exports rows to CSV using the EXACT header order from your file
+ */
 export function rowsToCsv(rows: ParsedRow[]): string {
   if (rows.length === 0) return "";
-  const headers = Object.keys(rows[0]);
-  const lines = [headers.join(",")];
+
+  const lines: string[] = [ORDERED_EXPORT_HEADERS.join(",")];
+
   for (const row of rows) {
-    lines.push(headers.map((h) => JSON.stringify(row[h] ?? "")).join(","));
+    const values = ORDERED_EXPORT_HEADERS.map((header) => {
+      const value = row[header] ?? "";
+
+      // Proper CSV escaping
+      if (typeof value === "string") {
+        if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }
+
+      return String(value);
+    });
+
+    lines.push(values.join(","));
   }
+
   return lines.join("\n");
 }

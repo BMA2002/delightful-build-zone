@@ -1,3 +1,4 @@
+// hooks/useDashboardStats.ts
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -16,7 +17,7 @@ export function useDashboardStats() {
 
         supabase
           .from("containers")
-          .select("id, status, is_dummy, total_pallets, total_cartons, gross_weight_kg", { count: "exact" }), // removed 'type'
+          .select("id, status, is_dummy", { count: "exact" }),
 
         supabase
           .from("allocations")
@@ -26,21 +27,20 @@ export function useDashboardStats() {
       const filesToday = filesRes.count || 0;
       const totalContainers = containersRes.count || 0;
       const containerData = containersRes.data || [];
+
       const totalPallets = (allocationsRes.data || []).reduce(
         (sum, a) => sum + (a.pallets || 0),
         0
       );
 
-      // Calculate from actual data (no 'type' column)
       const activeContainers = containerData.length;
       const pendingContainers = containerData.filter((c: any) =>
-        ["pending", "loading"].includes(c.status || "")
+        ["pending", "loading"].includes((c.status || "").toLowerCase())
       ).length;
 
       const dummyContainers = containerData.filter((c: any) => c.is_dummy === true).length;
       const realContainers = totalContainers - dummyContainers;
 
-      // loadingCount + sealedCount removed because they were causing errors and not in your latest return type
       return {
         filesToday,
         activeContainers,
@@ -52,5 +52,6 @@ export function useDashboardStats() {
       };
     },
     refetchInterval: 30000,
+    staleTime: 10000,
   });
 }
