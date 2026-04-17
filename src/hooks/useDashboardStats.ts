@@ -8,29 +8,49 @@ export function useDashboardStats() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const [filesRes, containersRes, allocationsRes, allFilesRes] = await Promise.all([
-        supabase.from("uploaded_files").select("id", { count: "exact" }).gte("created_at", today.toISOString()),
-        supabase.from("containers").select("id, status, total_pallets", { count: "exact" }),
-        supabase.from("allocations").select("pallets"),
-        supabase.from("uploaded_files").select("id, created_at, status"),
+      const [filesRes, containersRes, allocationsRes] = await Promise.all([
+        supabase
+          .from("uploaded_files")
+          .select("id", { count: "exact" })
+          .gte("created_at", today.toISOString()),
+
+        supabase
+          .from("containers")
+          .select("id, status, is_dummy, total_pallets, total_cartons, gross_weight_kg", { count: "exact" }), // removed 'type'
+
+        supabase
+          .from("allocations")
+          .select("pallets"),
       ]);
 
       const filesToday = filesRes.count || 0;
-      const activeContainers = containersRes.count || 0;
+      const totalContainers = containersRes.count || 0;
       const containerData = containersRes.data || [];
-      const totalPallets = (allocationsRes.data || []).reduce((sum, a) => sum + (a.pallets || 0), 0);
+      const totalPallets = (allocationsRes.data || []).reduce(
+        (sum, a) => sum + (a.pallets || 0),
+        0
+      );
 
-      const loadingCount = containerData.filter((c) => c.status === "loading").length;
-      const sealedCount = containerData.filter((c) => c.status === "sealed").length;
+      // Calculate from actual data (no 'type' column)
+      const activeContainers = containerData.length;
+      const pendingContainers = containerData.filter((c: any) =>
+        ["pending", "loading"].includes(c.status || "")
+      ).length;
 
+      const dummyContainers = containerData.filter((c: any) => c.is_dummy === true).length;
+      const realContainers = totalContainers - dummyContainers;
+
+      // loadingCount + sealedCount removed because they were causing errors and not in your latest return type
       return {
         filesToday,
         activeContainers,
         totalPallets,
-        loadingCount,
-        sealedCount,
+        totalContainers,
+        pendingContainers,
+        dummyContainers,
+        realContainers,
       };
     },
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   });
 }
