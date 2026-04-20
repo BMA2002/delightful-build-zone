@@ -23,7 +23,7 @@ const ORDERED_EXPORT_HEADERS = [
   "Container No",
   "Seal Number",
   "Barcode",
-  "Barcode",                    // duplicate as in your file
+  "Barcode",                    
   "No Cartons",
   "Gross",
   "Nett",
@@ -133,7 +133,6 @@ export function getTodayStr(): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// ==================== SPLITTING LOGIC ====================
 
 export function splitAllocation(
   rows: ParsedRow[],
