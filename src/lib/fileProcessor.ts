@@ -94,12 +94,26 @@ export function parseFile(file: File): Promise<ParsedFileResult> {
           }
 
           const headers = lines[0].split(delimiter).map(h => h.trim());
-          const rows = lines.slice(1).map(line => {
+          let rows = lines.slice(1).map(line => {
             const values = line.split(delimiter).map(v => v.trim());
             const row: ParsedRow = {};
             headers.forEach((h, i) => {
               row[h] = values[i] || null;
             });
+            return row;
+          });
+
+          // Generate dummy containers for rows where No Cartons is empty
+          let dummySeq = 1;
+          rows = rows.map(row => {
+            if (!row["No Cartons"] || String(row["No Cartons"]).trim() === "") {
+              const dateStr = getTodayStr();
+              const prefix = row["Container No"] ? String(row["Container No"]).substring(0, 4) : "CONT";
+              return {
+                ...row,
+                "Container No": generateDummyContainer(prefix, dateStr, dummySeq++)
+              };
+            }
             return row;
           });
 
