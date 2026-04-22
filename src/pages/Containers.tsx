@@ -112,7 +112,7 @@ const Containers = () => {
                   <TableCell className="text-right">{Number(c.gross_weight_kg).toLocaleString()} kg</TableCell>
                   <TableCell className="text-right">{Number(c.volume_m3)} m³</TableCell>
                   <TableCell>
-                    <Select value={c.status} onValueChange={(v) => handleStatusChange(c.id, v as any)}>
+                    <Select value={c.status} onValueChange={(v) => handleStatusChange(c.id, v as any)} disabled={updateContainer.isPending}>
                       <SelectTrigger className="w-28 h-7 text-xs">
                         <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${statusColors[c.status] || ""}`}>
                           {c.status}
@@ -127,8 +127,8 @@ const Containers = () => {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c.id)}>
-                      <Trash2 size={14} />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c.id)} disabled={deleteContainer.isPending}>
+                      {deleteContainer.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     </Button>
                   </TableCell>
                 </TableRow>

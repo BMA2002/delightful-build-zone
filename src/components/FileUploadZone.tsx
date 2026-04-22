@@ -1,23 +1,41 @@
 import React, { useState, DragEvent, ChangeEvent } from "react";
-import { UploadCloud, FileText, Trash2, CheckCircle, Loader2 } from "lucide-react";
+import { UploadCloud, FileText, Trash2, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
+import { parseFile, splitAllocation, rowsToWorkbook, downloadWorkbook } from "@/lib/fileProcessor";
+import { useInsertFile, useUpdateFile } from "@/hooks/useFiles";
+import { useInsertContainer } from "@/hooks/useContainers";
+import { useToast } from "@/hooks/use-toast";
 
 interface FileItem {
   file: File;
-  type: "PO" | "MT" | "EXCEL";
+  type: "po" | "mt" | "excel" | "csv";
   progress: number;
-  status: "waiting" | "processing" | "done" | "error";
+  status: "waiting" | "processing" | "processed" | "error";
+  parsedData?: any;
+  hasContainerInfo?: boolean;
+  hasSealInfo?: boolean;
+  rowsWithContainers?: number;
+  rowCount?: number;
 }
 
 const detectFileType = (file: File): FileItem["type"] => {
   const name = file.name.toLowerCase();
-  if (name.includes("po")) return "PO";
-  if (name.includes("mt")) return "MT";
-  return "EXCEL";
+  if (name.endsWith(".po") || name.endsWith(".ez6")) return "po";
+  if (name.endsWith(".mt")) return "mt";
+  if (name.endsWith(".csv")) return "csv";
+  return "excel";
 };
 
 const FileUploadZone: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [splitMethod, setSplitMethod] = useState("equal");
+  const [numSplits, setNumSplits] = useState(1);
+  const [selectedFiles, setSelectedFiles] = useState("all");
+  const [useDummyContainer, setUseDummyContainer] = useState(false);
+  const insertFile = useInsertFile();
+  const updateFile = useUpdateFile();
+  const insertContainer = useInsertContainer();
+  const { toast } = useToast();
 
   const handleFiles = (fileList: FileList) => {
     const newFiles: FileItem[] = Array.from(fileList).map((file) => ({
@@ -29,29 +47,172 @@ const FileUploadZone: React.FC = () => {
 
     setFiles((prev) => [...prev, ...newFiles]);
 
-    newFiles.forEach(simulateUpload);
+    newFiles.forEach(processFile);
   };
 
-  const simulateUpload = (fileItem: FileItem) => {
-    fileItem.status = "processing";
-
-    const interval = setInterval(() => {
+  const processFile = async (fileItem: FileItem) => {
+    try {
       setFiles((prev) =>
-        prev.map((f) => {
-          if (f.file === fileItem.file) {
-            const progress = Math.min(f.progress + 10, 100);
-            return {
-              ...f,
-              progress,
-              status: progress === 100 ? "done" : "processing",
-            };
-          }
-          return f;
-        })
+        prev.map((f) => (f.file === fileItem.file ? { ...f, status: "processing", progress: 10 } : f))
       );
-    }, 200);
 
-    setTimeout(() => clearInterval(interval), 2200);
+      const parsed = await parseFile(fileItem.file);
+      
+      if (parsed.hasContainerInfo && parsed.rowsWithContainers > 0) {
+        setFiles((prev) =>
+          prev.map((f) => (f.file === fileItem.file ? { ...f, status: "error", parsedData: parsed.rows, hasContainerInfo: parsed.hasContainerInfo, hasSealInfo: parsed.hasSealInfo, rowsWithContainers: parsed.rowsWithContainers, rowCount: parsed.rows.length } : f))
+        );
+        toast({ 
+          title: "File contains container numbers", 
+          description: "Files with existing container allocations cannot be processed. Please upload files without container information.", 
+          variant: "destructive" 
+        });
+        return;
+      }
+      
+      setFiles((prev) =>
+        prev.map((f) => (f.file === fileItem.file ? { ...f, progress: 50, parsedData: parsed.rows, hasContainerInfo: parsed.hasContainerInfo, hasSealInfo: parsed.hasSealInfo, rowsWithContainers: parsed.rowsWithContainers, rowCount: parsed.rows.length } : f))
+      );
+
+      // Insert file record
+      const fileRecord = await insertFile.mutateAsync({
+        file_name: fileItem.file.name,
+        file_type: fileItem.type,
+        file_size: fileItem.file.size,
+        row_count: parsed.rows.length,
+        status: "processed",
+        parsed_data: parsed.rows,
+        has_container_info: parsed.hasContainerInfo,
+        has_seal_info: parsed.hasSealInfo,
+        rows_with_containers: parsed.rowsWithContainers,
+      });
+
+      setFiles((prev) =>
+        prev.map((f) => (f.file === fileItem.file ? { ...f, progress: 100, status: "processed" } : f))
+      );
+
+      toast({ title: "File processed successfully", description: `${parsed.rows.length} rows parsed` });
+
+    } catch (error: any) {
+      setFiles((prev) =>
+        prev.map((f) => (f.file === fileItem.file ? { ...f, status: "error" } : f))
+      );
+      toast({ title: "Processing failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const hasContainerFiles = files.some(f => f.hasContainerInfo && f.rowsWithContainers > 0);
+
+  const handleProcess = async () => {
+    const processedFiles = files.filter(f => f.status === "processed");
+    if (processedFiles.length === 0) {
+      toast({ title: "No files to process", description: "Please upload and process files first", variant: "destructive" });
+      return;
+    }
+
+    try {
+      let allRows: any[] = [];
+      let headers: string[] = [];
+
+      // Collect all rows based on selected files
+      processedFiles.forEach(f => {
+        if (selectedFiles === "all" || 
+            (selectedFiles === "po" && f.type === "po") ||
+            (selectedFiles === "mt" && f.type === "mt") ||
+            (selectedFiles === "excel" && (f.type === "excel" || f.type === "csv"))) {
+          if (f.parsedData) {
+            allRows.push(...f.parsedData);
+            if (headers.length === 0) headers = Object.keys(f.parsedData[0] || {});
+          }
+        }
+      });
+
+      if (allRows.length === 0) {
+        toast({ title: "No data to process", description: "No matching files found", variant: "destructive" });
+        return;
+      }
+
+      // Apply split allocation
+      const splits = splitAllocation(allRows, splitMethod, numSplits, headers);
+
+      // Create containers for each split
+      for (let i = 0; i < splits.length; i++) {
+        const splitRows = splits[i];
+        if (splitRows.length === 0) continue;
+
+        const containerNumber = useDummyContainer 
+          ? `DUMMY-${Date.now()}-${i + 1}` 
+          : `CONT-${Date.now()}-${i + 1}`;
+
+        const totalPallets = splitRows.reduce((sum, r) => sum + (Number(r["No Pallets"] || r["pallets"] || 0)), 0);
+        const totalCartons = splitRows.reduce((sum, r) => sum + (Number(r["No Cartons"] || r["cartons"] || 0)), 0);
+        const grossWeight = splitRows.reduce((sum, r) => sum + (Number(r["Gross"] || 0)), 0);
+        const volume = splitRows.reduce((sum, r) => sum + (Number(r["Volume"] || 0)), 0);
+
+        await insertContainer.mutateAsync({
+          container_number: containerNumber,
+          seal_number: null,
+          is_dummy: useDummyContainer,
+          source_file_id: null, // Could link to multiple files
+          total_pallets: totalPallets,
+          total_cartons: totalCartons,
+          gross_weight_kg: grossWeight,
+          volume_m3: volume,
+          status: "pending",
+        });
+      }
+
+      toast({ title: "Processing complete", description: `${splits.length} containers created` });
+    } catch (error: any) {
+      toast({ title: "Processing failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const handlePreview = () => {
+    const processedFiles = files.filter(f => f.status === "processed");
+    if (processedFiles.length === 0) {
+      toast({ title: "No data to preview", description: "Please upload and process files first", variant: "destructive" });
+      return;
+    }
+
+    const totalRows = processedFiles.reduce((sum, f) => sum + (f.rowCount || 0), 0);
+    const totalContainers = processedFiles.reduce((sum, f) => sum + (f.rowsWithContainers || 0), 0);
+
+    toast({ 
+      title: "Data Preview", 
+      description: `Total files: ${processedFiles.length}, Total rows: ${totalRows}, Containers: ${totalContainers}` 
+    });
+  };
+
+  const handleCSVExport = () => {
+    const allRows = files.flatMap(f => f.parsedData || []);
+    if (allRows.length === 0) {
+      toast({ title: "No data", description: "No processed data to export", variant: "destructive" });
+      return;
+    }
+    const wb = rowsToWorkbook(allRows);
+    downloadWorkbook(wb, "export.xlsx");
+    toast({ title: "Exported", description: "Data exported to CSV" });
+  };
+
+  const handleReport = () => {
+    const processedFiles = files.filter(f => f.status === "processed");
+    if (processedFiles.length === 0) {
+      toast({ title: "No data for report", description: "Please upload and process files first", variant: "destructive" });
+      return;
+    }
+
+    const reportData = processedFiles.map(f => ({
+      file: f.file.name,
+      type: f.type,
+      rows: f.rowCount || 0,
+      containers: f.rowsWithContainers || 0,
+      hasContainerInfo: f.hasContainerInfo ? "Yes" : "No"
+    }));
+
+    const wb = rowsToWorkbook(reportData, "Report");
+    downloadWorkbook(wb, "processing-report.xlsx");
+    toast({ title: "Report generated", description: "Report downloaded as Excel file" });
   };
 
   const removeFile = (index: number) => {
@@ -69,9 +230,9 @@ const FileUploadZone: React.FC = () => {
   };
 
   const grouped = {
-    PO: files.filter((f) => f.type === "PO"),
-    MT: files.filter((f) => f.type === "MT"),
-    EXCEL: files.filter((f) => f.type === "EXCEL"),
+    PO: files.filter((f) => f.type === "po"),
+    MT: files.filter((f) => f.type === "mt"),
+    EXCEL: files.filter((f) => f.type === "excel" || f.type === "csv"),
   };
 
   return (
@@ -120,7 +281,8 @@ const FileUploadZone: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 {f.status === "processing" && <Loader2 className="animate-spin" size={16} />}
-                {f.status === "done" && <CheckCircle className="text-green-500" size={16} />}
+                {f.status === "processed" && <CheckCircle className="text-green-500" size={16} />}
+                {f.status === "error" && <span className="text-red-500 text-xs">Error</span>}
                 <button onClick={() => removeFile(i)}>
                   <Trash2 size={16} />
                 </button>
@@ -142,25 +304,79 @@ const FileUploadZone: React.FC = () => {
       <div className="mt-8 bg-white p-4 rounded-2xl shadow border">
         <h3 className="font-semibold mb-3">Split Allocation</h3>
         <div className="grid md:grid-cols-4 gap-3">
-          <select className="border p-2 rounded">
-            <option>Equal Distribution</option>
+          <select 
+            value={splitMethod} 
+            onChange={(e) => setSplitMethod(e.target.value)} 
+            className="border p-2 rounded"
+          >
+            <option value="equal">Equal Distribution</option>
+            <option value="by_pallets">By Pallets</option>
+            <option value="by_cartons">By Cartons</option>
           </select>
-          <input type="number" placeholder="Splits" className="border p-2 rounded" />
-          <select className="border p-2 rounded">
-            <option>All Files</option>
+          <input 
+            type="number" 
+            placeholder="Splits" 
+            value={numSplits} 
+            onChange={(e) => setNumSplits(Number(e.target.value))} 
+            className="border p-2 rounded" 
+            min="1"
+          />
+          <select 
+            value={selectedFiles} 
+            onChange={(e) => setSelectedFiles(e.target.value)} 
+            className="border p-2 rounded"
+          >
+            <option value="all">All Files</option>
+            <option value="po">PO Files</option>
+            <option value="mt">MT Files</option>
+            <option value="excel">Excel Files</option>
           </select>
           <label className="flex items-center gap-2">
-            <input type="checkbox" /> Dummy Container
+            <input 
+              type="checkbox" 
+              checked={useDummyContainer} 
+              onChange={(e) => setUseDummyContainer(e.target.checked)} 
+            /> Dummy Container
           </label>
         </div>
       </div>
 
       {/* Actions */}
       <div className="flex gap-3 mt-6">
-        <button className="bg-orange-500 text-white px-4 py-2 rounded-xl">Process</button>
-        <button className="bg-gray-200 px-4 py-2 rounded-xl">Preview</button>
-        <button className="bg-gray-200 px-4 py-2 rounded-xl">CSV</button>
-        <button className="bg-gray-800 text-white px-4 py-2 rounded-xl">Report</button>
+        {hasContainerFiles && (
+          <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl flex-1">
+            <AlertTriangle size={20} />
+            <span className="text-sm">Cannot process files with existing container allocations. Remove files containing container numbers to continue.</span>
+          </div>
+        )}
+        <button 
+          onClick={handleProcess} 
+          disabled={hasContainerFiles || files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-orange-500 text-white'}`}
+        >
+          Process
+        </button>
+        <button 
+          onClick={handlePreview} 
+          disabled={hasContainerFiles || files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-200'}`}
+        >
+          Preview
+        </button>
+        <button 
+          onClick={handleCSVExport} 
+          disabled={hasContainerFiles || files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-200'}`}
+        >
+          CSV
+        </button>
+        <button 
+          onClick={handleReport} 
+          disabled={hasContainerFiles || files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white'}`}
+        >
+          Report
+        </button>
       </div>
     </div>
   );

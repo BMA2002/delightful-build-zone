@@ -1,3 +1,4 @@
+
 CREATE TABLE public.activity_log (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   file_name text NOT NULL,

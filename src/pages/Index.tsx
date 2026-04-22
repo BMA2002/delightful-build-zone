@@ -66,25 +66,25 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-200">
+    <div className="min-h-screen">
       <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-10">
 
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-white">Dashboard</h1>
-            <p className="text-zinc-400 mt-1 text-lg">
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground mt-1 text-lg">
               Forging Efficiency in Every Break Bulk Shipment
             </p>
           </div>
-          <div className="text-sm text-zinc-500">Live • Updates every 30 seconds</div>
+          <div className="text-sm text-muted-foreground">Live • Updates every 30 seconds</div>
         </div>
 
         {/* KPI Cards - Lighter Accents */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="bg-zinc-900 border border-zinc-800 hover:shadow-md transition-all">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm font-medium text-zinc-400">Files Today</CardTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <Card className="bg-card border-border hover:shadow-md transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Files Today</CardTitle>
               <div className="p-3 bg-sky-950/70 rounded-2xl">
                 <FileText className="h-6 w-6 text-sky-400" />
               </div>
@@ -96,9 +96,9 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-zinc-900 border border-zinc-800 hover:shadow-md transition-all">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm font-medium text-zinc-400">Active Containers</CardTitle>
+          <Card className="bg-card border-border hover:shadow-md transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Active Containers</CardTitle>
               <div className="p-3 bg-emerald-950/70 rounded-2xl">
                 <Package className="h-6 w-6 text-emerald-400" />
               </div>
@@ -110,9 +110,9 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-zinc-900 border border-zinc-800 hover:shadow-md transition-all">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm font-medium text-zinc-400">Pallets Allocated</CardTitle>
+          <Card className="bg-card border-border hover:shadow-md transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pallets Allocated</CardTitle>
               <div className="p-3 bg-amber-950/70 rounded-2xl">
                 <Layers className="h-6 w-6 text-amber-400" />
               </div>
@@ -124,30 +124,30 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-zinc-900 border border-zinc-800 hover:shadow-md transition-all">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm font-medium text-zinc-400">Total Containers</CardTitle>
+          <Card className="bg-card border-border hover:shadow-md transition-all">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Containers</CardTitle>
               <div className="p-3 bg-violet-950/70 rounded-2xl">
                 <Truck className="h-6 w-6 text-violet-400" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-5xl font-semibold tracking-tighter text-white">
+              <div className="text-5xl font-semibold tracking-tighter text-foreground">
                 {containersLoading ? "—" : containers.length}
               </div>
-              <p className="text-zinc-400 text-sm mt-1">{realCount} real • {dummyCount} dummy</p>
+              <p className="text-muted-foreground text-sm mt-1">{realCount} real • {dummyCount} dummy</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Graphs Section - High-level & Professional */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
           {/* 1. Container Status Breakdown (Pie) */}
-          <Card className="bg-zinc-900 border border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <TrendingUp className="h-5 w-5 text-sky-400" />
+                <TrendingUp className="h-5 w-5 text-accent" />
                 Container Status Breakdown
               </CardTitle>
             </CardHeader>
@@ -174,15 +174,15 @@ const Dashboard = () => {
           </Card>
 
           {/* 2. Pending vs Active (Bar) */}
-          <Card className="bg-zinc-900 border border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">Pending vs Active Containers</CardTitle>
             </CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={pendingData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9ca3af" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" stroke="#6b7280" />
                   <YAxis stroke="#9ca3af" />
                   <Tooltip />
                   <Bar dataKey="value" radius={8} />
@@ -192,16 +192,16 @@ const Dashboard = () => {
           </Card>
 
           {/* 3. Pallet Allocation Trend (Line) */}
-          <Card className="bg-zinc-900 border border-zinc-800 lg:col-span-2">
+          <Card className="bg-card border-border lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">Weekly Pallet Allocation Trend</CardTitle>
             </CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={palletTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="day" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="day" stroke="#6b7280" />
+                  <YAxis stroke="#6b7280" />
                   <Tooltip />
                   <Line 
                     type="natural" 
@@ -216,21 +216,21 @@ const Dashboard = () => {
           </Card>
 
           {/* 4. Files Processed Trend (Line) - Smaller */}
-          <Card className="bg-zinc-900 border border-zinc-800">
+          <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-lg">Daily Files Processed Trend</CardTitle>
             </CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={filesTrendData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="day" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="day" stroke="#6b7280" />
+                  <YAxis stroke="#6b7280" />
                   <Tooltip />
                   <Line 
                     type="monotone" 
                     dataKey="files" 
-                    stroke="#a5b4fc" 
+                    stroke="#3b82f6" 
                     strokeWidth={3} 
                   />
                 </LineChart>
