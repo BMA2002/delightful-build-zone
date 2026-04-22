@@ -1,6 +1,6 @@
 import React, { useState, DragEvent, ChangeEvent } from "react";
 import { UploadCloud, FileText, Trash2, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
-import { parseFile, splitAllocation, rowsToWorkbook, downloadWorkbook } from "@/lib/fileProcessor";
+import { parseFile, splitAllocation, rowsToWorkbook, downloadWorkbook, downloadCSV } from "@/lib/fileProcessor";
 import { useInsertFile, useUpdateFile } from "@/hooks/useFiles";
 import { useInsertContainer } from "@/hooks/useContainers";
 import { useToast } from "@/hooks/use-toast";
@@ -190,8 +190,7 @@ const FileUploadZone: React.FC = () => {
       toast({ title: "No data", description: "No processed data to export", variant: "destructive" });
       return;
     }
-    const wb = rowsToWorkbook(allRows);
-    downloadWorkbook(wb, "export.xlsx");
+    downloadCSV(allRows, "export.csv");
     toast({ title: "Exported", description: "Data exported to CSV" });
   };
 

@@ -71,52 +71,102 @@ function detectFileType(fileName: string): "po" | "mt" | "excel" | "csv" {
 export function parseFile(file: File): Promise<ParsedFileResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    const fileType = detectFileType(file.name);
 
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+        if (fileType === "po" || fileType === "csv" || fileType === "mt") {
+          // Parse as text file
+          const text = e.target!.result as string;
+          const delimiter = fileType === "po" ? "|" : ",";
+          const lines = text.split('\n').map(l => l.trim()).filter(l => l);
 
-        const jsonData = XLSX.utils.sheet_to_json<ParsedRow>(worksheet, { defval: null });
+          if (lines.length === 0) {
+            resolve({
+              rows: [],
+              headers: [],
+              hasContainerInfo: false,
+              hasSealInfo: false,
+              rowsWithContainers: 0,
+              fileType,
+            });
+            return;
+          }
 
-        if (jsonData.length === 0) {
-          resolve({
-            rows: [],
-            headers: [],
-            hasContainerInfo: false,
-            hasSealInfo: false,
-            rowsWithContainers: 0,
-            fileType: detectFileType(file.name),
+          const headers = lines[0].split(delimiter).map(h => h.trim());
+          const rows = lines.slice(1).map(line => {
+            const values = line.split(delimiter).map(v => v.trim());
+            const row: ParsedRow = {};
+            headers.forEach((h, i) => {
+              row[h] = values[i] || null;
+            });
+            return row;
           });
-          return;
+
+          const containerCol = headers.find((h) => matchesColumn(h, CONTAINER_PATTERNS));
+          const sealCol = headers.find((h) => matchesColumn(h, SEAL_PATTERNS));
+          const rowsWithContainers = containerCol
+            ? rows.filter((row) => row[containerCol] && String(row[containerCol]).trim()).length
+            : 0;
+
+          resolve({
+            rows,
+            headers,
+            hasContainerInfo: !!containerCol && rowsWithContainers > 0,
+            hasSealInfo: !!sealCol && rows.some((r) => r[sealCol] && String(r[sealCol]).trim()),
+            rowsWithContainers,
+            fileType,
+          });
+        } else {
+          // Parse as Excel file
+          const data = new Uint8Array(e.target!.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+
+          const jsonData = XLSX.utils.sheet_to_json<ParsedRow>(worksheet, { defval: null });
+
+          if (jsonData.length === 0) {
+            resolve({
+              rows: [],
+              headers: [],
+              hasContainerInfo: false,
+              hasSealInfo: false,
+              rowsWithContainers: 0,
+              fileType,
+            });
+            return;
+          }
+
+          const headers = Object.keys(jsonData[0]);
+
+          const containerCol = headers.find((h) => matchesColumn(h, CONTAINER_PATTERNS));
+          const sealCol = headers.find((h) => matchesColumn(h, SEAL_PATTERNS));
+          const rowsWithContainers = containerCol
+            ? jsonData.filter((row) => row[containerCol] && String(row[containerCol]).trim()).length
+            : 0;
+
+          resolve({
+            rows: jsonData,
+            headers,
+            hasContainerInfo: !!containerCol && rowsWithContainers > 0,
+            hasSealInfo: !!sealCol && jsonData.some((r) => r[sealCol] && String(r[sealCol]).trim()),
+            rowsWithContainers,
+            fileType,
+          });
         }
-
-        const headers = Object.keys(jsonData[0]);
-
-        const containerCol = headers.find((h) => matchesColumn(h, CONTAINER_PATTERNS));
-        const sealCol = headers.find((h) => matchesColumn(h, SEAL_PATTERNS));
-
-        const rowsWithContainers = containerCol
-          ? jsonData.filter((row) => row[containerCol] && String(row[containerCol]).trim()).length
-          : 0;
-
-        resolve({
-          rows: jsonData,
-          headers,
-          hasContainerInfo: !!containerCol && rowsWithContainers > 0,
-          hasSealInfo: !!sealCol && jsonData.some((r) => r[sealCol] && String(r[sealCol]).trim()),
-          rowsWithContainers,
-          fileType: detectFileType(file.name),
-        });
       } catch (err) {
         reject(err);
       }
     };
 
     reader.onerror = () => reject(reader.error);
-    reader.readAsArrayBuffer(file);
+
+    if (fileType === "po" || fileType === "csv" || fileType === "mt") {
+      reader.readAsText(file);
+    } else {
+      reader.readAsArrayBuffer(file);
+    }
   });
 }
 
@@ -196,6 +246,22 @@ export function rowsToWorkbook(rows: ParsedRow[], sheetName = "Data"): XLSX.Work
 
 export function downloadWorkbook(wb: XLSX.WorkBook, fileName: string) {
   XLSX.writeFile(wb, fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
+}
+
+export function downloadCSV(rows: ParsedRow[], fileName: string) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const csv = XLSX.utils.sheet_to_csv(ws);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName.endsWith('.csv') ? fileName : `${fileName}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
 }
 
 /**
