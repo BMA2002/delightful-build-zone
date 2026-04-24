@@ -107,7 +107,7 @@ const Reports = () => {
     }
     if (allRows.length === 0) { toast({ title: "No data", variant: "destructive" }); return; }
     const csv = rowsToCsv(allRows);
-    const bbkNumber = String(settings?.bbk_number || "1961").replace(/"/g, "");
+    const bbkNumber = String(settings?.bbk_number || "3000").replace(/"/g, "");
     downloadBlob(csv, `BBK${bbkNumber}.csv`, "text/csv");
     toast({ title: "BBK exported" });
   };
