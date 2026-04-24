@@ -6,7 +6,7 @@ import { useUploadedFiles } from "@/hooks/useFiles";
 import { useSettings } from "@/hooks/useSettings";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
-import { rowsToCsv } from "@/lib/fileProcessor";
+import { rowsToCsv, ORDERED_EXPORT_HEADERS } from "@/lib/fileProcessor";
 
 const Reports = () => {
   const { data: containers } = useContainers();
@@ -91,17 +91,66 @@ const Reports = () => {
 
   const exportBBK = () => {
     if (!allocations?.length) { toast({ title: "No allocations", variant: "destructive" }); return; }
+
+    // Column mapping for BBK export
+    const columnMapping: Record<string, string[]> = {
+      "Season": ["Season"],
+      "Location Code": ["Location Code", "Location"],
+      "Organization": ["Organization"],
+      "Date Dispatched": ["Date Dispatched", "Date"],
+      "Container No": ["Container No", "container_number"],
+      "Seal Number": ["Seal Number", "seal_number"],
+      "Barcode": ["Barcode"],
+      "No Cartons": ["No Cartons", "cartons", "Cartons"],
+      "Gross": ["Gross", "gross_weight_kg", "Weight"],
+      "Nett": ["Nett", "nett"],
+      "Commodity Code": ["Commodity Code"],
+      "Variety Code": ["Variety Code"],
+      "Grade Code": ["Grade Code"],
+      "Pack Code": ["Pack Code"],
+      "Count Code": ["Count Code"],
+      "Mark Code": ["Mark Code"],
+      "Target Market": ["Target Market"],
+      "Country": ["Country"],
+      "Farm No.": ["Farm No."],
+      "PHC": ["PHC"],
+      "Orchard": ["Orchard"],
+      "Inspection Date": ["Inspection Date"],
+      "Insp. Point": ["Insp. Point"],
+      "Insp. Code": ["Insp. Code"],
+      "Original Intake Date": ["Original Intake Date"],
+      "Consignment Note No.": ["Consignment Note No."],
+      "Temptale": ["Temptale"],
+      "Inventory Code": ["Inventory Code"],
+      "Phyto Data": ["Phyto Data"],
+      "UPN": ["UPN"],
+      "Consec no": ["Consec no"],
+      "Target Country": ["Target Country"],
+      "Production Area": ["Production Area"],
+    };
+
     const allRows: any[] = [];
     for (const allocation of allocations) {
       const container = allocation.containers as any;
       const rows = allocation.allocation_data as any[];
       if (rows && Array.isArray(rows)) {
         for (const row of rows) {
-          allRows.push({
-            ...row,
-            "Container No": container?.container_number || "",
-            "Seal Number": container?.seal_number || "",
-          });
+          const mappedRow: any = {};
+          for (const bbkHeader of ORDERED_EXPORT_HEADERS) {
+            const possibleKeys = columnMapping[bbkHeader] || [bbkHeader];
+            let value = null;
+            for (const key of possibleKeys) {
+              if (row[key] !== undefined && row[key] !== null) {
+                value = row[key];
+                break;
+              }
+            }
+            mappedRow[bbkHeader] = value;
+          }
+          // Override with assigned container/seal
+          mappedRow["Container No"] = container?.container_number || "";
+          mappedRow["Seal Number"] = container?.seal_number || "";
+          allRows.push(mappedRow);
         }
       }
     }

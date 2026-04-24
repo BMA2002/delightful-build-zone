@@ -15,7 +15,7 @@ export interface ParsedFileResult {
 }
 
 // Exact headers from your CSV/Excel file (in correct order)
-const ORDERED_EXPORT_HEADERS = [
+export const ORDERED_EXPORT_HEADERS = [
   "Season",
   "Location Code",
   "Organization",

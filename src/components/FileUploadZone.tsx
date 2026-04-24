@@ -108,6 +108,7 @@ const FileUploadZone: React.FC = () => {
       return;
     }
 
+    setChoice("bbk");
     await proceedProcess();
   };
 
@@ -180,7 +181,7 @@ const FileUploadZone: React.FC = () => {
         toast({ title: "BBK Processing complete", description: `${splits.length} dummy containers created` });
       } else if (choice === "keep") {
         // Group rows by container number
-        const grouped = allRows.reduce((acc, row) => {
+        const grouped: Record<string, any[]> = allRows.reduce((acc, row) => {
           const cont = row["Container No"] || row["container_number"] || "";
           if (!acc[cont]) acc[cont] = [];
           acc[cont].push(row);
@@ -190,11 +191,11 @@ const FileUploadZone: React.FC = () => {
         for (const [cont, rows] of Object.entries(grouped)) {
           if (!cont) continue;
 
-          const totalPallets = rows.reduce((sum, r) => sum + (Number(r["No Pallets"] || r["pallets"] || 0)), 0);
-          const totalCartons = rows.reduce((sum, r) => sum + (Number(r["No Cartons"] || r["cartons"] || 0)), 0);
-          const grossWeight = rows.reduce((sum, r) => sum + (Number(r["Gross"] || 0)), 0);
-          const volume = rows.reduce((sum, r) => sum + (Number(r["Volume"] || 0)), 0);
-          const seal = rows.find(r => r["Seal Number"] || r["seal_number"])?.["Seal Number"] || rows.find(r => r["Seal Number"] || r["seal_number"])?.["seal_number"] || null;
+          const totalPallets = rows.reduce((sum: number, r: any) => sum + (Number(r["No Pallets"] || r["pallets"] || 0)), 0);
+          const totalCartons = rows.reduce((sum: number, r: any) => sum + (Number(r["No Cartons"] || r["cartons"] || 0)), 0);
+          const grossWeight = rows.reduce((sum: number, r: any) => sum + (Number(r["Gross"] || 0)), 0);
+          const volume = rows.reduce((sum: number, r: any) => sum + (Number(r["Volume"] || 0)), 0);
+          const seal = rows.find((r: any) => r["Seal Number"] || r["seal_number"])?.["Seal Number"] || rows.find((r: any) => r["Seal Number"] || r["seal_number"])?.["seal_number"] || null;
 
           const containerRecord = await insertContainer.mutateAsync({
             container_number: cont,
