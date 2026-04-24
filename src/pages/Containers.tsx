@@ -121,8 +121,8 @@ const Containers = () => {
                       <SelectContent>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="loading">Loading</SelectItem>
-                        <SelectItem value="sealed">Sealed</SelectItem>
-                        <SelectItem value="dispatched">Dispatched</SelectItem>
+                        <SelectItem value="Processed">Processed</SelectItem>
+                        <SelectItem value="Done">Done</SelectItem>
                       </SelectContent>
                     </Select>
                   </TableCell>
