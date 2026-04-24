@@ -21,7 +21,7 @@ const Settings = () => {
     setContainerPrefix(String(settings.dummy_container_prefix || "BRM").replace(/"/g, ""));
     setSealPrefix(String(settings.dummy_seal_prefix || "DUMMYSEAL").replace(/"/g, ""));
     setDateFormat(String(settings.date_format || "dd/MM/yyyy").replace(/"/g, ""));
-    setBbkNumber(String(settings.bbk_number || "1961").replace(/"/g, ""));
+    setBbkNumber(String(settings.bbk_number || "3000").replace(/"/g, ""));
     setInitialized(true);
   }
 
