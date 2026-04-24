@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Package, Search, Filter, Loader2, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,12 @@ const Containers = () => {
   const deleteContainer = useDeleteContainer();
   const { toast } = useToast();
 
-  const filtered = (containers || []).filter((c) => {
+  const filtered = useMemo(() => (containers || []).filter((c) => {
     const matchesSearch = c.container_number.toLowerCase().includes(search.toLowerCase()) ||
       (c.uploaded_files as any)?.file_name?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || c.status === statusFilter;
     return matchesSearch && matchesStatus;
-  });
+  }), [containers, search, statusFilter]);
 
   const handleStatusChange = async (id: string, status: "pending" | "loading" | "sealed" | "dispatched") => {
     try {

@@ -13,6 +13,9 @@ export function useSettings() {
       });
       return map;
     },
+    staleTime: 10 * 60 * 1000, // 10 minutes, settings don't change often
+    gcTime: 30 * 60 * 1000, // 30 minutes
+    retry: 3,
   });
 }
 
