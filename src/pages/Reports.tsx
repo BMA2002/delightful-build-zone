@@ -3,13 +3,16 @@ import { Button } from "@/components/ui/button";
 import { useContainers } from "@/hooks/useContainers";
 import { useAllocations } from "@/hooks/useAllocations";
 import { useUploadedFiles } from "@/hooks/useFiles";
+import { useSettings } from "@/hooks/useSettings";
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
+import { rowsToCsv } from "@/lib/fileProcessor";
 
 const Reports = () => {
   const { data: containers } = useContainers();
   const { data: allocations } = useAllocations();
   const { data: files } = useUploadedFiles();
+  const { data: settings } = useSettings();
   const { toast } = useToast();
 
   const exportContainerSummary = (format: "xlsx" | "csv") => {
@@ -86,6 +89,29 @@ const Reports = () => {
     toast({ title: "Report exported" });
   };
 
+  const exportBBK = () => {
+    if (!allocations?.length) { toast({ title: "No allocations", variant: "destructive" }); return; }
+    const allRows: any[] = [];
+    for (const allocation of allocations) {
+      const container = allocation.containers as any;
+      const rows = allocation.allocation_data as any[];
+      if (rows && Array.isArray(rows)) {
+        for (const row of rows) {
+          allRows.push({
+            ...row,
+            "Container No": container?.container_number || "",
+            "Seal Number": container?.seal_number || "",
+          });
+        }
+      }
+    }
+    if (allRows.length === 0) { toast({ title: "No data", variant: "destructive" }); return; }
+    const csv = rowsToCsv(allRows);
+    const bbkNumber = String(settings?.bbk_number || "1961").replace(/"/g, "");
+    downloadBlob(csv, `BBK${bbkNumber}.csv`, "text/csv");
+    toast({ title: "BBK exported" });
+  };
+
   const downloadBlob = (content: string, fileName: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -122,6 +148,14 @@ const Reports = () => {
       actions: [
         { label: "XLSX", onClick: () => exportDummyReport("xlsx") },
         { label: "CSV", onClick: () => exportDummyReport("csv") },
+      ],
+    },
+    {
+      name: "BBK Export",
+      desc: `Break Bulk Cargo export with container and seal assignments per item`,
+      icon: FileText,
+      actions: [
+        { label: "CSV", onClick: exportBBK },
       ],
     },
   ];

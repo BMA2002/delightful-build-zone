@@ -3,6 +3,7 @@ import { UploadCloud, FileText, Trash2, CheckCircle, Loader2, AlertTriangle } fr
 import { parseFile, splitAllocation, rowsToWorkbook, downloadWorkbook, downloadCSV } from "@/lib/fileProcessor";
 import { useInsertFile, useUpdateFile } from "@/hooks/useFiles";
 import { useInsertContainer } from "@/hooks/useContainers";
+import { useInsertAllocation } from "@/hooks/useAllocations";
 import { useToast } from "@/hooks/use-toast";
 
 interface FileItem {
@@ -35,6 +36,7 @@ const FileUploadZone: React.FC = () => {
   const insertFile = useInsertFile();
   const updateFile = useUpdateFile();
   const insertContainer = useInsertContainer();
+  const insertAllocation = useInsertAllocation();
   const { toast } = useToast();
 
   const handleFiles = (fileList: FileList) => {
@@ -149,7 +151,7 @@ const FileUploadZone: React.FC = () => {
         const grossWeight = splitRows.reduce((sum, r) => sum + (Number(r["Gross"] || 0)), 0);
         const volume = splitRows.reduce((sum, r) => sum + (Number(r["Volume"] || 0)), 0);
 
-        await insertContainer.mutateAsync({
+        const containerRecord = await insertContainer.mutateAsync({
           container_number: containerNumber,
           seal_number: null,
           is_dummy: useDummyContainer,
@@ -159,6 +161,19 @@ const FileUploadZone: React.FC = () => {
           gross_weight_kg: grossWeight,
           volume_m3: volume,
           status: "pending",
+        });
+
+        // Create allocation for this split
+        await insertAllocation.mutateAsync({
+          source_file_id: processedFiles[0]?.file?.name ? null : null, // For now, set to null
+          container_id: containerRecord.id,
+          method: splitMethod as any,
+          items_count: splitRows.length,
+          pallets: totalPallets,
+          cartons: totalCartons,
+          gross_weight_kg: grossWeight,
+          volume_m3: volume,
+          allocation_data: splitRows, // Store the rows for BBK export
         });
       }
 

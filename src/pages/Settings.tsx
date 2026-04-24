@@ -13,6 +13,7 @@ const Settings = () => {
   const [containerPrefix, setContainerPrefix] = useState("");
   const [sealPrefix, setSealPrefix] = useState("");
   const [dateFormat, setDateFormat] = useState("");
+  const [bbkNumber, setBbkNumber] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   // Initialize from settings once loaded
@@ -20,6 +21,7 @@ const Settings = () => {
     setContainerPrefix(String(settings.dummy_container_prefix || "BRM").replace(/"/g, ""));
     setSealPrefix(String(settings.dummy_seal_prefix || "DUMMYSEAL").replace(/"/g, ""));
     setDateFormat(String(settings.date_format || "dd/MM/yyyy").replace(/"/g, ""));
+    setBbkNumber(String(settings.bbk_number || "1961").replace(/"/g, ""));
     setInitialized(true);
   }
 
@@ -28,6 +30,7 @@ const Settings = () => {
       await updateSetting.mutateAsync({ key: "dummy_container_prefix", value: containerPrefix });
       await updateSetting.mutateAsync({ key: "dummy_seal_prefix", value: sealPrefix });
       await updateSetting.mutateAsync({ key: "date_format", value: dateFormat });
+      await updateSetting.mutateAsync({ key: "bbk_number", value: bbkNumber });
       toast({ title: "Settings saved", description: "Dummy container format updated" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -75,6 +78,10 @@ const Settings = () => {
             <div>
               <label className="text-sm text-muted-foreground mb-1 block">Date Format</label>
               <Input value={dateFormat} onChange={(e) => setDateFormat(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">BBK Number</label>
+              <Input value={bbkNumber} onChange={(e) => setBbkNumber(e.target.value)} />
             </div>
             <Button
               className="bg-accent hover:bg-accent/90 text-accent-foreground gap-2"
