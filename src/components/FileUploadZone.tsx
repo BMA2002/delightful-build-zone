@@ -5,6 +5,7 @@ import { useInsertFile, useUpdateFile } from "@/hooks/useFiles";
 import { useInsertContainer } from "@/hooks/useContainers";
 import { useInsertAllocation } from "@/hooks/useAllocations";
 import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface FileItem {
   file: File;
@@ -33,6 +34,8 @@ const FileUploadZone: React.FC = () => {
   const [numSplits, setNumSplits] = useState(1);
   const [selectedFiles, setSelectedFiles] = useState("all");
   const [useDummyContainer, setUseDummyContainer] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const [choice, setChoice] = useState<"bbk" | "keep" | null>(null);
   const insertFile = useInsertFile();
   const updateFile = useUpdateFile();
   const insertContainer = useInsertContainer();
@@ -59,18 +62,6 @@ const FileUploadZone: React.FC = () => {
       );
 
       const parsed = await parseFile(fileItem.file);
-      
-      if (parsed.hasContainerInfo && parsed.rowsWithContainers > 0) {
-        setFiles((prev) =>
-          prev.map((f) => (f.file === fileItem.file ? { ...f, status: "error", parsedData: parsed.rows, hasContainerInfo: parsed.hasContainerInfo, hasSealInfo: parsed.hasSealInfo, rowsWithContainers: parsed.rowsWithContainers, rowCount: parsed.rows.length } : f))
-        );
-        toast({ 
-          title: "File contains container numbers", 
-          description: "Files with existing container allocations cannot be processed. Please upload files without container information.", 
-          variant: "destructive" 
-        });
-        return;
-      }
       
       setFiles((prev) =>
         prev.map((f) => (f.file === fileItem.file ? { ...f, progress: 50, parsedData: parsed.rows, hasContainerInfo: parsed.hasContainerInfo, hasSealInfo: parsed.hasSealInfo, rowsWithContainers: parsed.rowsWithContainers, rowCount: parsed.rows.length } : f))
@@ -112,6 +103,16 @@ const FileUploadZone: React.FC = () => {
       return;
     }
 
+    if (hasContainerFiles) {
+      setShowDialog(true);
+      return;
+    }
+
+    await proceedProcess();
+  };
+
+  const proceedProcess = async () => {
+    const processedFiles = files.filter(f => f.status === "processed");
     try {
       let allRows: any[] = [];
       let headers: string[] = [];
@@ -134,50 +135,95 @@ const FileUploadZone: React.FC = () => {
         return;
       }
 
-      // Apply split allocation
-      const splits = splitAllocation(allRows, splitMethod, numSplits, headers);
+      if (choice === "bbk") {
+        // Apply split allocation
+        const splits = splitAllocation(allRows, splitMethod, numSplits, headers);
 
-      // Create containers for each split
-      for (let i = 0; i < splits.length; i++) {
-        const splitRows = splits[i];
-        if (splitRows.length === 0) continue;
+        // Create containers for each split
+        for (let i = 0; i < splits.length; i++) {
+          const splitRows = splits[i];
+          if (splitRows.length === 0) continue;
 
-        const containerNumber = useDummyContainer 
-          ? `DUMMY-${Date.now()}-${i + 1}` 
-          : `CONT-${Date.now()}-${i + 1}`;
+          const containerNumber = `DUMMY-${Date.now()}-${i + 1}`;
 
-        const totalPallets = splitRows.reduce((sum, r) => sum + (Number(r["No Pallets"] || r["pallets"] || 0)), 0);
-        const totalCartons = splitRows.reduce((sum, r) => sum + (Number(r["No Cartons"] || r["cartons"] || 0)), 0);
-        const grossWeight = splitRows.reduce((sum, r) => sum + (Number(r["Gross"] || 0)), 0);
-        const volume = splitRows.reduce((sum, r) => sum + (Number(r["Volume"] || 0)), 0);
+          const totalPallets = splitRows.reduce((sum, r) => sum + (Number(r["No Pallets"] || r["pallets"] || 0)), 0);
+          const totalCartons = splitRows.reduce((sum, r) => sum + (Number(r["No Cartons"] || r["cartons"] || 0)), 0);
+          const grossWeight = splitRows.reduce((sum, r) => sum + (Number(r["Gross"] || 0)), 0);
+          const volume = splitRows.reduce((sum, r) => sum + (Number(r["Volume"] || 0)), 0);
 
-        const containerRecord = await insertContainer.mutateAsync({
-          container_number: containerNumber,
-          seal_number: null,
-          is_dummy: useDummyContainer,
-          source_file_id: null, // Could link to multiple files
-          total_pallets: totalPallets,
-          total_cartons: totalCartons,
-          gross_weight_kg: grossWeight,
-          volume_m3: volume,
-          status: "pending",
-        });
+          const containerRecord = await insertContainer.mutateAsync({
+            container_number: containerNumber,
+            seal_number: null,
+            is_dummy: true,
+            source_file_id: null, // Could link to multiple files
+            total_pallets: totalPallets,
+            total_cartons: totalCartons,
+            gross_weight_kg: grossWeight,
+            volume_m3: volume,
+            status: "pending",
+          });
 
-        // Create allocation for this split
-        await insertAllocation.mutateAsync({
-          source_file_id: processedFiles[0]?.file?.name ? null : null, // For now, set to null
-          container_id: containerRecord.id,
-          method: splitMethod as any,
-          items_count: splitRows.length,
-          pallets: totalPallets,
-          cartons: totalCartons,
-          gross_weight_kg: grossWeight,
-          volume_m3: volume,
-          allocation_data: splitRows, // Store the rows for BBK export
-        });
+          // Create allocation for this split
+          await insertAllocation.mutateAsync({
+            source_file_id: null, // For now, set to null
+            container_id: containerRecord.id,
+            method: splitMethod as any,
+            items_count: splitRows.length,
+            pallets: totalPallets,
+            cartons: totalCartons,
+            gross_weight_kg: grossWeight,
+            volume_m3: volume,
+            allocation_data: splitRows, // Store the rows for BBK export
+          });
+        }
+
+        toast({ title: "BBK Processing complete", description: `${splits.length} dummy containers created` });
+      } else if (choice === "keep") {
+        // Group rows by container number
+        const grouped = allRows.reduce((acc, row) => {
+          const cont = row["Container No"] || row["container_number"] || "";
+          if (!acc[cont]) acc[cont] = [];
+          acc[cont].push(row);
+          return acc;
+        }, {} as Record<string, any[]>);
+
+        for (const [cont, rows] of Object.entries(grouped)) {
+          if (!cont) continue;
+
+          const totalPallets = rows.reduce((sum, r) => sum + (Number(r["No Pallets"] || r["pallets"] || 0)), 0);
+          const totalCartons = rows.reduce((sum, r) => sum + (Number(r["No Cartons"] || r["cartons"] || 0)), 0);
+          const grossWeight = rows.reduce((sum, r) => sum + (Number(r["Gross"] || 0)), 0);
+          const volume = rows.reduce((sum, r) => sum + (Number(r["Volume"] || 0)), 0);
+          const seal = rows.find(r => r["Seal Number"] || r["seal_number"])?.["Seal Number"] || rows.find(r => r["Seal Number"] || r["seal_number"])?.["seal_number"] || null;
+
+          const containerRecord = await insertContainer.mutateAsync({
+            container_number: cont,
+            seal_number: seal,
+            is_dummy: false,
+            source_file_id: null,
+            total_pallets: totalPallets,
+            total_cartons: totalCartons,
+            gross_weight_kg: grossWeight,
+            volume_m3: volume,
+            status: "pending",
+          });
+
+          // Create allocation for this container
+          await insertAllocation.mutateAsync({
+            source_file_id: null,
+            container_id: containerRecord.id,
+            method: "equal_distribution",
+            items_count: rows.length,
+            pallets: totalPallets,
+            cartons: totalCartons,
+            gross_weight_kg: grossWeight,
+            volume_m3: volume,
+            allocation_data: rows,
+          });
+        }
+
+        toast({ title: "Processing complete", description: `${Object.keys(grouped).length} containers kept with existing numbers` });
       }
-
-      toast({ title: "Processing complete", description: `${splits.length} containers created` });
     } catch (error: any) {
       toast({ title: "Processing failed", description: error.message, variant: "destructive" });
     }
@@ -357,41 +403,55 @@ const FileUploadZone: React.FC = () => {
 
       {/* Actions */}
       <div className="flex gap-3 mt-6">
-        {hasContainerFiles && (
-          <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl flex-1">
-            <AlertTriangle size={20} />
-            <span className="text-sm">Cannot process files with existing container allocations. Remove files containing container numbers to continue.</span>
-          </div>
-        )}
         <button 
           onClick={handleProcess} 
-          disabled={hasContainerFiles || files.length === 0} 
-          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-orange-500 text-white'}`}
+          disabled={files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-orange-500 text-white'}`}
         >
           Process
         </button>
         <button 
           onClick={handlePreview} 
-          disabled={hasContainerFiles || files.length === 0} 
-          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-200'}`}
+          disabled={files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-200'}`}
         >
           Preview
         </button>
         <button 
           onClick={handleCSVExport} 
-          disabled={hasContainerFiles || files.length === 0} 
-          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-200'}`}
+          disabled={files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-200'}`}
         >
           CSV
         </button>
         <button 
           onClick={handleReport} 
-          disabled={hasContainerFiles || files.length === 0} 
-          className={`px-4 py-2 rounded-xl ${hasContainerFiles || files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white'}`}
+          disabled={files.length === 0} 
+          className={`px-4 py-2 rounded-xl ${files.length === 0 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-gray-800 text-white'}`}
         >
           Report
         </button>
       </div>
+
+      <AlertDialog open={showDialog} onOpenChange={setShowDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Container Numbers Detected</AlertDialogTitle>
+            <AlertDialogDescription>
+              The uploaded files contain existing container numbers. Would you like to continue with the BBK process (generate dummy containers) or keep the existing container and seal numbers?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDialog(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setChoice("bbk"); setShowDialog(false); proceedProcess(); }}>
+              Continue BBK Process
+            </AlertDialogAction>
+            <AlertDialogAction onClick={() => { setChoice("keep"); setShowDialog(false); proceedProcess(); }}>
+              Keep Existing Numbers
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
